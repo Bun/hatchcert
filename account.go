@@ -51,7 +51,10 @@ func Account(path string) *AccountMeta {
 	return ac
 }
 
-func Setup(acct *AccountMeta, email string) error {
+func Setup(acct *AccountMeta, acme, email string) error {
+	if acme == "" {
+		acme = LEDirectoryProduction
+	}
 	store := false
 	if acct.Key == nil {
 		pk, pv, err := generatePrivateKey(DefaultKeyType)
@@ -68,34 +71,34 @@ func Setup(acct *AccountMeta, email string) error {
 
 	var err error
 	acct.Config = lego.NewConfig(acct)
-	acct.Config.CADirURL = LEDirectoryStaging
+	acct.Config.CADirURL = acme
 	acct.Config.UserAgent = "hatchcert+lego/0.0.1"
 	acct.Client, err = lego.NewClient(acct.Config)
 	if err != nil {
 		panic(err)
 	}
 
-	if true {
-		if acct.Registration == nil {
-			reg, err := acct.Client.Registration.ResolveAccountByKey()
-			if err != nil {
-				// Perhaps urn:ietf:params:acme:error:accountDoesNotExist
-				log.Printf("%T: %v", err, err)
-			} else {
-				acct.Registration = reg
-				store = true
-			}
-		}
-		if acct.Registration == nil {
-			reg, err := acct.Client.Registration.Register(registration.RegisterOptions{
-				TermsOfServiceAgreed: true,
-			})
-			if err != nil {
-				return err
-			}
+	if acct.Registration == nil {
+		reg, err := acct.Client.Registration.ResolveAccountByKey()
+		if err != nil {
+			// If the error is something like
+			// `urn:ietf:params:acme:error:accountDoesNotExist` we want to
+			// just register a new account
+			log.Printf("%T: %v", err, err)
+		} else {
 			acct.Registration = reg
 			store = true
 		}
+	}
+	if acct.Registration == nil {
+		reg, err := acct.Client.Registration.Register(registration.RegisterOptions{
+			TermsOfServiceAgreed: true,
+		})
+		if err != nil {
+			return err
+		}
+		acct.Registration = reg
+		store = true
 	}
 	if store {
 		if err := marshal(acct.AccountFile, acct.SavedAccount); err != nil {

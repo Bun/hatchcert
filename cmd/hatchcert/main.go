@@ -27,7 +27,7 @@ func main() {
 	}
 
 	account := hatchcert.Account(*path)
-	if err := hatchcert.Setup(account, conf.Email); err != nil {
+	if err := hatchcert.Setup(account, conf.ACME, conf.Email); err != nil {
 		log.Fatalln(err)
 	}
 

@@ -10,6 +10,7 @@ import (
 )
 
 type Configuration struct {
+	ACME        string
 	AcceptedTOS bool
 	Email       string
 	Certs       []Cert
@@ -30,6 +31,8 @@ func Conf(fname string) (c Configuration) {
 		}
 		parts := strings.Split(line, " ")
 		switch parts[0] {
+		case "acme_url":
+			c.ACME = parts[1]
 		case "accept_tos":
 			c.AcceptedTOS = true
 		case "email":
