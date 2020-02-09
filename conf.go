@@ -2,10 +2,12 @@ package hatchcert
 
 import (
 	"io/ioutil"
+	"net"
 	"os"
 	"strings"
 
 	"github.com/go-acme/lego/v3/challenge"
+	"github.com/go-acme/lego/v3/challenge/http01"
 	"github.com/go-acme/lego/v3/providers/http/webroot"
 )
 
@@ -50,6 +52,18 @@ func Conf(fname string) (c Configuration) {
 			if err != nil {
 				panic(err)
 			}
+			c.Challenge.HTTP = append(c.Challenge.HTTP, p)
+
+		case "http":
+			listen := ":80"
+			if len(parts) > 1 {
+				listen = parts[1]
+			}
+			host, port, err := net.SplitHostPort(listen)
+			if err != nil {
+				panic(err)
+			}
+			p := http01.NewProviderServer(host, port)
 			c.Challenge.HTTP = append(c.Challenge.HTTP, p)
 
 		default:
