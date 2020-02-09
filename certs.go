@@ -26,20 +26,25 @@ func issue(a *AccountMeta, cert Cert) error {
 	if err != nil {
 		return err
 	}
-	return storeCert(a.Path, cert.Name, c)
-}
-
-func storeCert(base, name string, cert *certificate.Resource) error {
-	certs := filepath.Join(base, "certs")
-	os.MkdirAll(certs, 0755)
-
-	store, err := ioutil.TempDir(certs, name+".")
+	store, err := storeCert(a.Path, cert.Name, c)
 	if err != nil {
 		return err
 	}
-	store, err = filepath.Abs(store)
+	return updateLinks(a.Path, store, cert.Domains)
+}
+
+func storeCert(base, name string, cert *certificate.Resource) (string, error) {
+	certs := filepath.Join(base, "certs")
+	os.MkdirAll(certs, 0755)
+
+	storerel, err := ioutil.TempDir(certs, name+".")
 	if err != nil {
-		return err
+		return "", err
+	}
+	store, err := filepath.Abs(storerel)
+	if err != nil {
+		os.Remove(storerel)
+		return "", err
 	}
 	os.Chmod(store, 0755)
 
@@ -79,13 +84,20 @@ func storeCert(base, name string, cert *certificate.Resource) error {
 			errors = append(errors, err)
 		}
 	}
-	if err := errors.Nil(); err != nil {
-		return err
-	}
+	return store, errors.Nil()
+}
 
+func updateLinks(base, store string, domains []string) error {
+	var errors MultiError
 	live := filepath.Join(base, "live")
 	os.MkdirAll(live, 0755)
-	return replaceLink(live, store, name)
+	for _, domain := range domains {
+		err := replaceLink(live, store, domain)
+		if err != nil {
+			errors = append(errors, err)
+		}
+	}
+	return errors.Nil()
 }
 
 func Issue(a *AccountMeta, certs []Cert) error {

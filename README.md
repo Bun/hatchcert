@@ -43,7 +43,7 @@ other tools, such as acmetool:
 
 * By default, all data is relative to `/var/lib/acme`
 * Account information (including the private key) are written to `./account`
-* Individiual certifacates are stored in `./certs/`
+* Individual certificates are stored in `./certs/`
 * A directory of symlinks pointing to the latest certificate is maintained in
   `./live/` for each (sub)domain
 
