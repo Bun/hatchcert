@@ -55,3 +55,30 @@ other tools, such as acmetool:
 * Private key permissions
 * Packaging for Debian/Ubuntu
 * Call to hook after refreshing certificates
+
+
+## nginx
+
+To use the webroot challenge provider, create `/etc/nginx/snippets/acme.conf`
+containing:
+
+    # Let's encrypt
+    location /.well-known/acme-challenge/ {
+        alias /run/acme/.well-known/acme-challenge/;
+    }
+
+Include this snippet in every server block you want to issue certificates for.
+For example:
+
+    server {
+        server_name example.com;
+        listen 0.0.0.0:443 ssl http2;
+        listen [::]:443 ssl http2;
+        add_header Strict-Transport-Security max-age=31536000;
+
+        include snippets/acme.conf;
+        ssl_certificate /var/lib/acme/live/example.com/fullchain;
+        ssl_certificate_key /var/lib/acme/live/example.com/privkey;
+
+        root /var/www/example.com/htdocs;
+    }
