@@ -3,7 +3,7 @@
 Hatchcert is a config-driven tool to issue certificates using the ACME protocol.
 It is intended to be easily deployable using configuration management systems
 such as Ansible.
-This tool is based around the [lego library](https://go-acme.github.io/lego/).
+This tool is based on the [lego library](https://go-acme.github.io/lego/).
 
 
 ## Getting started
@@ -41,8 +41,8 @@ To issue certificates, you must run `hatchcert` manually.
 The output directory structure produced by hatchcert is comparable to that of
 other tools, such as acmetool:
 
-* By default, all data is relative to `/var/lib/acme`
-* Account information (including the private key) are written to `./account`
+* By default, all data is stored relative to `/var/lib/acme`
+* Account information (including the private key) is written to `./account`
 * Individual certificates are stored in `./certs/`
 * A directory of symlinks pointing to the latest certificate is maintained in
   `./live/` for each (sub)domain
