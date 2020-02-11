@@ -1,17 +1,65 @@
 package hatchcert
 
 import (
+	"bytes"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/go-acme/lego/v3/certcrypto"
 	"github.com/go-acme/lego/v3/certificate"
 )
+
+const ValidityDays = 30
 
 type Cert struct {
 	Name       string
 	Domains    []string
 	AuthMethod string
+}
+
+func exp(fname string) (int, error) {
+	pemcerts, err := ioutil.ReadFile(fname)
+	if err != nil {
+		return 0, err
+	}
+	cs, err := certcrypto.ParsePEMBundle(pemcerts)
+	if err != nil {
+		return 0, err
+	}
+	for _, c := range cs {
+		if !c.IsCA {
+			days := time.Until(c.NotAfter) / (time.Hour * 24)
+			if days < 0 {
+				days = 0
+			}
+			return int(days), nil
+		}
+	}
+	return 0, io.EOF
+}
+
+func ScanCerts(path string, certs []Cert) ([]Cert, error) {
+	var errors MultiError
+	var issue []Cert
+	for _, cert := range certs {
+		f := filepath.Join(path, "live", cert.Name, "cert")
+		days, err := exp(f)
+		if err != nil {
+			if os.IsNotExist(err) {
+				issue = append(issue, cert)
+			} else {
+				errors = append(errors, err)
+			}
+			continue
+		}
+		if days < ValidityDays {
+			issue = append(issue, cert)
+		}
+	}
+	return issue, errors.Nil()
 }
 
 func issue(a *AccountMeta, cert Cert) error {
@@ -56,21 +104,15 @@ func storeCert(base, name string, cert *certificate.Resource) (string, error) {
 		}
 	}
 
-	if cert.Certificate != nil {
-		err := ioutil.WriteFile(filepath.Join(store, "cert"), cert.Certificate, 0644)
-		if err != nil {
-			errors = append(errors, err)
-		}
-	}
-
-	if cert.Certificate != nil || cert.IssuerCertificate != nil {
-		var chain []byte
-		chain = append(chain, cert.Certificate...)
-		chain = append(chain, cert.IssuerCertificate...)
-		err := ioutil.WriteFile(filepath.Join(store, "fullchain"), chain, 0644)
-		if err != nil {
-			errors = append(errors, err)
-		}
+	var chain []byte
+	chain = append(chain, cert.Certificate...)
+	chain = append(chain, cert.IssuerCertificate...)
+	// In ACMEv2, the issuer is always included even if you don't request a
+	// bundle; filter duplicates manually
+	chain = dedupCerts(trailingNewline(chain))
+	err = ioutil.WriteFile(filepath.Join(store, "fullchain"), chain, 0644)
+	if err != nil {
+		errors = append(errors, err)
 	}
 
 	if cert.CertURL != "" || cert.CertStableURL != "" {
@@ -108,4 +150,32 @@ func Issue(a *AccountMeta, certs []Cert) error {
 		}
 	}
 	return errors.Nil()
+}
+
+func trailingNewline(b []byte) []byte {
+	if len(b) > 0 && b[len(b)-1] != '\n' {
+		return append(b, '\n')
+	}
+	return b
+}
+
+func dedupCerts(b []byte) (ret []byte) {
+	srch := []byte("\n-----END CERTIFICATE-----\n")
+	seen := map[string]bool{}
+	ptr := b
+	for {
+		c := bytes.Index(ptr, srch)
+		if c < 0 {
+			break
+		}
+		c += len(srch)
+		cert := string(ptr[:c])
+		ptr = ptr[c:]
+		if !seen[cert] {
+			seen[cert] = true
+			ret = append(ret, cert...)
+		}
+	}
+	ret = append(ret, ptr...)
+	return
 }
