@@ -70,8 +70,11 @@ func issue(a *AccountMeta, cert Cert) error {
 		MustStaple: false,
 	}
 
+	o := InterceptOutput()
+	defer o.Restore()
 	c, err := a.Client.Certificate.Obtain(request)
 	if err != nil {
+		o.Emit()
 		return err
 	}
 	store, err := storeCert(a.Path, cert.Name, c)

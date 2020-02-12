@@ -54,7 +54,6 @@ func main() {
 		want = conf.Certs
 
 	case "account":
-		log.Fatalln("Not implemented")
 
 	default:
 		log.Fatalf("Unknown command: %v", opt)

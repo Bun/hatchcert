@@ -69,12 +69,16 @@ func Setup(acct *AccountMeta, acme, email string) error {
 	}
 	acct.SavedAccount.Email = email
 
+	o := InterceptOutput()
+	defer o.Restore()
+
 	var err error
 	acct.Config = lego.NewConfig(acct)
 	acct.Config.CADirURL = acme
 	acct.Config.UserAgent = "hatchcert+lego/0.0.1"
 	acct.Client, err = lego.NewClient(acct.Config)
 	if err != nil {
+		o.Emit()
 		panic(err)
 	}
 
@@ -95,6 +99,7 @@ func Setup(acct *AccountMeta, acme, email string) error {
 			TermsOfServiceAgreed: true,
 		})
 		if err != nil {
+			o.Emit()
 			return err
 		}
 		acct.Registration = reg
