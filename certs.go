@@ -2,6 +2,7 @@ package hatchcert
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -41,11 +42,23 @@ func exp(fname string) (int, error) {
 	return 0, io.EOF
 }
 
+func Active(path string, certs []Cert) {
+	for _, cert := range certs {
+		f := filepath.Join(path, "live", cert.Name, "fullchain")
+		days, err := exp(f)
+		if err != nil {
+			fmt.Fprint(os.Stderr, cert.Name, ": ", f, ": ", err, "\n")
+		} else {
+			fmt.Print(cert.Name, ": expires in ", days, " day(s)\n")
+		}
+	}
+}
+
 func ScanCerts(path string, certs []Cert) ([]Cert, error) {
 	var errors MultiError
 	var issue []Cert
 	for _, cert := range certs {
-		f := filepath.Join(path, "live", cert.Name, "cert")
+		f := filepath.Join(path, "live", cert.Name, "fullchain")
 		days, err := exp(f)
 		if err != nil {
 			if os.IsNotExist(err) {

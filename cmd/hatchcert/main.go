@@ -55,6 +55,10 @@ func main() {
 
 	case "account":
 
+	case "status":
+		hatchcert.Active(*path, conf.Certs)
+		return
+
 	default:
 		log.Fatalf("Unknown command: %v", opt)
 	}
