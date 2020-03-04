@@ -78,7 +78,6 @@ other tools, such as acmetool:
 * Helper tool to read and accept the terms of service
 * Add DNS challenge provider support
 * Private key permissions
-* Packaging for Debian/Ubuntu
 
 
 ## nginx
