@@ -1,0 +1,11 @@
+#!/bin/sh
+
+set -e
+
+SERVICES="httpd apache2 apache nginx lighttpd postfix dovecot exim exim4"
+
+for x in $SERVICES; do
+    [ -e "/lib/systemd/system/$x.service" -o -e "/etc/systemd/system/$x.service" ] && systemctl reload "$x.service" >/dev/null 2>/dev/null || true
+done
+
+exit 0

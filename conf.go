@@ -16,6 +16,7 @@ type Configuration struct {
 	AcceptedTOS bool
 	Email       string
 	Certs       []Cert
+	UpdateHooks [][]string
 
 	Challenge struct {
 		HTTP []challenge.Provider
@@ -41,6 +42,9 @@ func Conf(fname string) (c Configuration) {
 			c.Email = parts[1]
 		case "domain":
 			c.Certs = append(c.Certs, Cert{Name: parts[1], Domains: parts[1:]})
+		case "update-hook":
+			// TODO: could do some more parsing
+			c.UpdateHooks = append(c.UpdateHooks, parts[1:])
 
 		case "webroot":
 			// TODO: this provider is retarded and writes to

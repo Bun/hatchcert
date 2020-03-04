@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"os"
 
 	"awoo.nl/hatchcert"
 )
@@ -37,9 +38,11 @@ func main() {
 
 	var err error
 	var want []hatchcert.Cert
+	hook := false
 
 	switch opt := flag.Arg(0); opt {
 	case "reconcile", "":
+		hook = true
 		want, err = hatchcert.ScanCerts(*path, conf.Certs)
 		if err != nil {
 			log.Println("ScanCerts:", err)
@@ -86,10 +89,28 @@ func main() {
 	must(hatchcert.ChallengesDNS(account.Client, conf.Challenge.HTTP))
 
 	// Default action: create or refresh certs
-	err = hatchcert.Issue(
-		account,
-		want)
-	if err != nil {
-		log.Fatalln("Failed to issue:", err)
+	failed := false
+	issued := false
+	for _, req := range want {
+		err := hatchcert.Issue(account, req)
+		if err != nil {
+			failed = true
+			log.Println("Failed to issue:", err)
+		} else {
+			issued = true
+		}
+	}
+
+	if issued && hook {
+		for _, hook := range conf.UpdateHooks {
+			if err := hatchcert.Hook(hook); err != nil {
+				log.Println("Failed to run update hook:", err)
+				failed = true
+			}
+		}
+	}
+
+	if failed {
+		os.Exit(1)
 	}
 }

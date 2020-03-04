@@ -31,9 +31,34 @@ Create a configuration file, by default located in `/etc/hatchcert/config`:
     # You can also request multiple names in one certificate
     domain example.net www.example.net
 
+    # Optionally specify an executable file that will be called if, during
+    # reconcile, a certificate was updated. This is typically used in order to
+    # reload the certificates in various daemons. It is not called when you
+    # forcefully issue certificates.
+    #update-hook /etc/hatchcert/update-hook
+
 
 Hatchcert is currently in development.
-To issue certificates, you must run `hatchcert` manually.
+To get started:
+
+* Create the appropriate configuration in `/etc/hatchcert/config`
+* Run `hatchcert` once by hand, if you want to check if your configuration is
+  valid; this will immediately register an account with the ACME server
+* Optionally copy the update-hook script from `dist/update-hook` to `/etc/hatchcert/update-hook`
+* Copy the cronjob from `dist/hatchcert.cron` to
+  `/etc/cron.d/hatchcert` (adjust the cron schedule as required)
+
+
+
+## Running hatchcert as non-root user
+
+Running hatchcert is the easiest option, but not strictly required:
+
+* Create the `/var/lib/acme` directory in such a way that your desired user can
+  write to it (or specify an alternative base path using the `-path` parameter)
+* Modify the cronjob so that hatchcert runs as the desired user
+* Ensure your update-hook script runs in such a way that it can reload services
+  (for example, with the appropriate sudo configuration)
 
 
 ## Output and storage

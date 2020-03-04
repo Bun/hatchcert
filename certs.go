@@ -75,7 +75,7 @@ func ScanCerts(path string, certs []Cert) ([]Cert, error) {
 	return issue, errors.Nil()
 }
 
-func issue(a *AccountMeta, cert Cert) error {
+func Issue(a *AccountMeta, cert Cert) error {
 	request := certificate.ObtainRequest{
 		Domains:    cert.Domains,
 		Bundle:     false,
@@ -152,16 +152,6 @@ func updateLinks(base, store string, domains []string) error {
 	for _, domain := range domains {
 		err := replaceLink(live, store, domain)
 		if err != nil {
-			errors = append(errors, err)
-		}
-	}
-	return errors.Nil()
-}
-
-func Issue(a *AccountMeta, certs []Cert) error {
-	var errors MultiError
-	for _, cert := range certs {
-		if err := issue(a, cert); err != nil {
 			errors = append(errors, err)
 		}
 	}
