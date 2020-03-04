@@ -52,7 +52,7 @@ To get started:
 
 ## Running hatchcert as non-root user
 
-Running hatchcert is the easiest option, but not strictly required:
+Running hatchcert as root is the easiest option, but not strictly required:
 
 * Create the `/var/lib/acme` directory in such a way that your desired user can
   write to it (or specify an alternative base path using the `-path` parameter)
@@ -79,7 +79,6 @@ other tools, such as acmetool:
 * Add DNS challenge provider support
 * Private key permissions
 * Packaging for Debian/Ubuntu
-* Call to hook after refreshing certificates
 
 
 ## nginx
