@@ -5,4 +5,4 @@ Priority: optional
 Maintainer: Ben de Graaff <ben@awoo.nl>
 Architecture: amd64
 Depends: libc6
-Description: Config-driver certificate generationg using the ACME protocol
+Description: Config-driver certificate generation using the ACME protocol
