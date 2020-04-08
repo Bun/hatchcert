@@ -86,7 +86,7 @@ func main() {
 	}
 
 	must(hatchcert.ChallengesHTTP(account.Client, conf.Challenge.HTTP))
-	must(hatchcert.ChallengesDNS(account.Client, conf.Challenge.HTTP))
+	must(hatchcert.ChallengesDNS(account.Client, conf.Challenge.DNS))
 
 	// Default action: create or refresh certs
 	failed := false

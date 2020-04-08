@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-acme/lego/v3/challenge"
 	"github.com/go-acme/lego/v3/challenge/http01"
+	"github.com/go-acme/lego/v3/providers/dns"
 	"github.com/go-acme/lego/v3/providers/http/webroot"
 )
 
@@ -69,6 +70,20 @@ func Conf(fname string) (c Configuration) {
 			}
 			p := http01.NewProviderServer(host, port)
 			c.Challenge.HTTP = append(c.Challenge.HTTP, p)
+
+		case "env":
+			kv := strings.SplitN(parts[1], "=", 2)
+			if err := os.Setenv(kv[0], kv[1]); err != nil {
+				panic(err)
+			}
+
+		case "dns":
+			// TODO: postpone since it relies on env
+			provider, err := dns.NewDNSChallengeProviderByName(parts[1])
+			if err != nil {
+				panic(err)
+			}
+			c.Challenge.DNS = append(c.Challenge.DNS, provider)
 
 		default:
 			panic(line)

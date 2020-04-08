@@ -76,8 +76,40 @@ other tools, such as acmetool:
 ## TODO
 
 * Helper tool to read and accept the terms of service
-* Add DNS challenge provider support
 * Private key permissions
+* Migrate away from Lego
+
+
+## ACME DNS example
+
+Basic support for Lego DNS challenge providers has been added.
+The following example shows how to use the ACME DNS provider:
+
+    # The provider is configured via environment variables
+    env ACME_DNS_API_BASE=https://dnsauth.example.com/
+    env ACME_DNS_STORAGE_PATH=/etc/hatchcert/acmedns.json
+    dns acme-dns
+
+    domain *.example.com
+
+If you already have credentials for, you can place them in
+`/etc/hatchcert/acmedns.json`:
+
+   {"example.com": {
+       "FullDomain": "04b30265-01ad-4275-88f2-3aaffe62d61e.dnsauth.example.com",
+       "SubDomain": "04b30265-01ad-4275-88f2-3aaffe62d61e",
+       "Username": "myusername",
+       "Password": "justAnExample"
+   }}
+
+Notes:
+
+* For wildcard certificates, the domain name in the `acmedns.json` config is
+  without the wildcard
+* The library Lego uses (goacmedns) has changed the format of the credentials
+  file in a future version without backwards compatibility (lowercase keys)
+* Future work will include a fully self-contained config without the secondary
+  file
 
 
 ## nginx
