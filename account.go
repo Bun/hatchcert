@@ -5,8 +5,8 @@ import (
 	"log"
 	"path/filepath"
 
-	"github.com/go-acme/lego/v3/lego"
-	"github.com/go-acme/lego/v3/registration"
+	"github.com/go-acme/lego/v4/lego"
+	"github.com/go-acme/lego/v4/registration"
 )
 
 var (
@@ -75,7 +75,7 @@ func Setup(acct *AccountMeta, acme, email string) error {
 	var err error
 	acct.Config = lego.NewConfig(acct)
 	acct.Config.CADirURL = acme
-	acct.Config.UserAgent = "hatchcert+lego/0.0.1"
+	acct.Config.UserAgent = "hatchcert+lego/0.2"
 	acct.Client, err = lego.NewClient(acct.Config)
 	if err != nil {
 		o.Emit()

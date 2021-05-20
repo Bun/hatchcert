@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/go-acme/lego/v3/challenge"
-	"github.com/go-acme/lego/v3/challenge/http01"
-	"github.com/go-acme/lego/v3/providers/dns"
-	"github.com/go-acme/lego/v3/providers/http/webroot"
+	"github.com/go-acme/lego/v4/challenge"
+	"github.com/go-acme/lego/v4/challenge/http01"
+	"github.com/go-acme/lego/v4/providers/dns"
+	"github.com/go-acme/lego/v4/providers/http/webroot"
 )
 
 type Configuration struct {

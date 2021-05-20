@@ -1,8 +1,8 @@
 package hatchcert
 
 import (
-	"github.com/go-acme/lego/v3/challenge"
-	"github.com/go-acme/lego/v3/lego"
+	"github.com/go-acme/lego/v4/challenge"
+	"github.com/go-acme/lego/v4/lego"
 )
 
 func ChallengesHTTP(client *lego.Client, ps []challenge.Provider) error {
