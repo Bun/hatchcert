@@ -62,6 +62,9 @@ func main() {
 		hatchcert.Active(*path, conf.Certs)
 		return
 
+	case "help":
+		log.Fatal("Commands: reconcile issue account status")
+
 	default:
 		log.Fatalf("Unknown command: %v", opt)
 	}
