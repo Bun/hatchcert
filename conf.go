@@ -35,10 +35,10 @@ func Conf(fname string) (c Configuration) {
 			continue
 		}
 		parts := strings.Split(line, " ")
-		switch parts[0] {
-		case "acme_url":
+		switch strings.ReplaceAll(parts[0], "_", "-") {
+		case "acme-url":
 			c.ACME = parts[1]
-		case "accept_tos":
+		case "accept-tos":
 			c.AcceptedTOS = true
 		case "email":
 			c.Email = parts[1]

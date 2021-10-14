@@ -12,11 +12,11 @@ Create a configuration file, by default located in `/etc/hatchcert/config`:
 
     # Specify the ACME service to use
     # hatchcert will use Let's Encrypt production by default
-    #acme_url https://acme-staging-v02.api.letsencrypt.org/directory
+    #acme-url https://acme-staging-v02.api.letsencrypt.org/directory
 
     # Confirm that you have read and accepted the terms of service of the ACME
     # service
-    #accept_tos
+    #accept-tos
 
     # Specify an email that will be used to contact you, e.g. when your
     # certificate is about to expire
