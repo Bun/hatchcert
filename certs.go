@@ -16,9 +16,10 @@ import (
 const ValidityDays = 30
 
 type Cert struct {
-	Name       string
-	Domains    []string
-	AuthMethod string
+	Name           string
+	Domains        []string
+	AuthMethod     string
+	PreferredChain string
 }
 
 func exp(fname string) (int, error) {
@@ -77,10 +78,11 @@ func ScanCerts(path string, certs []Cert) ([]Cert, error) {
 
 func Issue(a *AccountMeta, cert Cert) error {
 	request := certificate.ObtainRequest{
-		Domains:    cert.Domains,
-		Bundle:     false,
-		PrivateKey: nil,
-		MustStaple: false,
+		Domains:        cert.Domains,
+		PreferredChain: cert.PreferredChain,
+		Bundle:         false,
+		PrivateKey:     nil,
+		MustStaple:     false,
 	}
 
 	o := InterceptOutput()

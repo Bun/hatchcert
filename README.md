@@ -25,6 +25,9 @@ Create a configuration file, by default located in `/etc/hatchcert/config`:
     # Specify the root directory for the HTTP challenge solver
     webroot /run/acme
 
+    # Optionally specify which chain you prefer
+    #preferred-chain ISRG Root X1
+
     # Specify domains to issue certificates for
     domain example.com
 

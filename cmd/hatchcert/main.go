@@ -95,6 +95,7 @@ func main() {
 	failed := false
 	issued := false
 	for _, req := range want {
+		req.PreferredChain = conf.PreferredChain // FIXME
 		err := hatchcert.Issue(account, req)
 		if err != nil {
 			failed = true

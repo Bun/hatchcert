@@ -13,11 +13,12 @@ import (
 )
 
 type Configuration struct {
-	ACME        string
-	AcceptedTOS bool
-	Email       string
-	Certs       []Cert
-	UpdateHooks [][]string
+	ACME           string
+	AcceptedTOS    bool
+	Email          string
+	PreferredChain string
+	Certs          []Cert
+	UpdateHooks    [][]string
 
 	Challenge struct {
 		HTTP []challenge.Provider
@@ -43,6 +44,8 @@ func Conf(fname string) (c Configuration) {
 			c.Email = parts[1]
 		case "domain":
 			c.Certs = append(c.Certs, Cert{Name: parts[1], Domains: parts[1:]})
+		case "preferred-chain":
+			c.PreferredChain = strings.Join(parts[1:], " ")
 		case "update-hook":
 			// TODO: could do some more parsing
 			c.UpdateHooks = append(c.UpdateHooks, parts[1:])
