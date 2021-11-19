@@ -133,6 +133,14 @@ func storeCert(base, name string, cert *certificate.Resource) (string, error) {
 		errors = append(errors, err)
 	}
 
+	var combined []byte
+	combined = append(combined, chain...)
+	combined = append(combined, cert.PrivateKey...)
+	err = ioutil.WriteFile(filepath.Join(store, "combined"), combined, 0644)
+	if err != nil {
+		errors = append(errors, err)
+	}
+
 	if cert.CertURL != "" || cert.CertStableURL != "" {
 		url := cert.CertStableURL
 		if url == "" {
