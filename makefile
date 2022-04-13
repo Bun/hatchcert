@@ -11,6 +11,7 @@ deb:
 	mkdir -p build/usr/bin
 	mkdir -p build/etc/hatchcert
 	cp debian/control build/DEBIAN/control
+	cp dist/hatchcert.cron build/etc/hatchcert/hatchcert.cron
 	cp dist/config build/etc/hatchcert/config.example
 	cp dist/update-hook build/etc/hatchcert/update-hook.example
 	go build -v -o build/usr/bin/hatchcert ./cmd/hatchcert

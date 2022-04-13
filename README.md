@@ -22,6 +22,10 @@ Create a configuration file, by default located in `/etc/hatchcert/config`:
     # certificate is about to expire
     email hostmaster@example.com
 
+    # Use built-in HTTP server (listen on :80 by default); useful when
+    # bootstrapping
+    #http
+
     # Specify the root directory for the HTTP challenge solver
     webroot /run/acme
 
