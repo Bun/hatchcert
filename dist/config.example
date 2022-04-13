@@ -1,0 +1,33 @@
+# Specify the ACME service to use
+# hatchcert will use Let's Encrypt production by default
+#acme_url https://acme-staging-v02.api.letsencrypt.org/directory
+
+# Confirm that you have read and accepted the terms of service of the ACME
+# service
+#accept_tos
+
+# Specify an email that will be used to contact you, e.g. when your
+# certificate is about to expire
+#email hostmaster@example.com
+
+# Use built-in HTTP server (listen on :80 by default); useful when
+# bootstrapping
+#http
+
+# Specify the root directory for the HTTP challenge solver
+#webroot /run/acme
+
+# Optionally specify which chain you prefer
+#preferred-chain ISRG Root X1
+
+# Specify domains to issue certificates for
+#domain example.com
+
+# You can also request multiple names in one certificate
+#domain example.net www.example.net
+
+# Optionally specify an executable file that will be called if, during
+# reconcile, a certificate was updated. This is typically used in order to
+# reload the certificates in various daemons. It is not called when you
+# forcefully issue certificates.
+#update-hook /etc/hatchcert/update-hook
