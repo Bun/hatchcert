@@ -8,6 +8,8 @@ This tool is based on the [lego library](https://go-acme.github.io/lego/).
 
 ## Getting started
 
+Build hatchcert using `make hatchcert` or create a deb file using `make deb`.
+
 Create a configuration file, by default located in `/etc/hatchcert/config`:
 
     # Specify the ACME service to use
@@ -84,53 +86,37 @@ other tools, such as acmetool:
 
 * Helper tool to read and accept the terms of service
 * Private key permissions
-* Migrate away from Lego
+* Migrate away from lego
 
 
-## ACME DNS example
-
-Basic support for Lego DNS challenge providers has been added.
-The following example shows how to use the ACME DNS provider:
-
-    # The provider is configured via environment variables
-    env ACME_DNS_API_BASE=https://dnsauth.example.com/
-    env ACME_DNS_STORAGE_PATH=/etc/hatchcert/acmedns.json
-    dns acme-dns
-
-    domain *.example.com
-
-If you already have credentials for, you can place them in
-`/etc/hatchcert/acmedns.json`:
-
-   {"example.com": {
-       "FullDomain": "04b30265-01ad-4275-88f2-3aaffe62d61e.dnsauth.example.com",
-       "SubDomain": "04b30265-01ad-4275-88f2-3aaffe62d61e",
-       "Username": "myusername",
-       "Password": "justAnExample"
-   }}
-
-Notes:
-
-* For wildcard certificates, the domain name in the `acmedns.json` config is
-  without the wildcard
-* The library Lego uses (goacmedns) has changed the format of the credentials
-  file in a future version without backwards compatibility (lowercase keys)
-* Future work will include a fully self-contained config without the secondary
-  file
+## ACME challenge solvers
 
 
-## nginx
+### HTTP (http-01) using the built-in server
 
-To use the webroot challenge provider, create `/etc/nginx/snippets/acme.conf`
-containing:
+To use the built-in webserver (for example, if you're not already running a
+webserver), use the `http` keyword in the configuration.
+Specify a bind address with `http 10.1.2.3:80` or the default port 80 will be
+used.
+
+
+### HTTP (http-01) using an external webserver
+
+Hatchcert can write HTTP challenge files to a webroot using the `webroot`
+keyword.
+A subdirectory called `.well-known/acme-challenge/` will be created relative to
+this directory, which needs to be served over HTTP/HTTPS.
+
+For example, to use the webroot challenge provider with nginx with
+`webroot /run/acme`, create `/etc/nginx/snippets/acme.conf` containing:
 
     # Let's encrypt
     location /.well-known/acme-challenge/ {
         alias /run/acme/.well-known/acme-challenge/;
     }
 
-Include this snippet in every server block you want to issue certificates for.
-For example:
+Then, include this snippet in every server block you want to issue certificates
+for.  For example:
 
     server {
         server_name example.com;
@@ -144,3 +130,41 @@ For example:
 
         root /var/www/example.com/htdocs;
     }
+
+
+### DNS (dns-01)
+
+Hatchcert supports the numerous DNS providers that the lego library supports.
+Refer to the documentation at https://go-acme.github.io/lego/dns/ for the names
+of the providers and their required configuration.
+Specify the name/code of the provider using the `dns` keyword and specify
+required environment values using the `env` keyword.
+
+
+#### ACME DNS example
+
+The following example shows how to use the ACME DNS provider:
+
+    # The provider is configured via environment variables
+    env ACME_DNS_API_BASE=https://dnsauth.example.com/
+    env ACME_DNS_STORAGE_PATH=/etc/hatchcert/acmedns.json
+    dns acme-dns
+
+    domain *.example.com
+
+If you already have credentials for, you can place them in
+`/etc/hatchcert/acmedns.json`:
+
+    {"example.com": {
+       "fulldomain": "04b30265-01ad-4275-88f2-3aaffe62d61e.dnsauth.example.com",
+       "subdomain": "04b30265-01ad-4275-88f2-3aaffe62d61e",
+       "username": "myusername",
+       "password": "justAnExample"
+    }}
+
+Notes:
+
+* For wildcard certificates, the domain name in the `acmedns.json` config is
+  without the wildcard
+* The library lego uses for ACME DNS (goacmedns) has changed the format of the
+  credentials file in a without backwards compatibility (lowercase keys)

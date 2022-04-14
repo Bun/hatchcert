@@ -69,6 +69,10 @@ func main() {
 		log.Fatalf("Unknown command: %v", opt)
 	}
 
+	if err := os.MkdirAll(*path, 0755); err != nil {
+		log.Fatalln(err)
+	}
+
 	account := hatchcert.Account(*path)
 	if err := hatchcert.Setup(account, conf.ACME, conf.Email); err != nil {
 		log.Fatalln(err)
