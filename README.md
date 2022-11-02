@@ -152,7 +152,7 @@ The following example shows how to use the ACME DNS provider:
 
     domain *.example.com
 
-If you already have credentials for, you can place them in
+You can place preexisting ACME DNS credentials in
 `/etc/hatchcert/acmedns.json`:
 
     {"example.com": {
