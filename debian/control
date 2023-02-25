@@ -1,5 +1,5 @@
 Package: hatchcert
-Version: 0.5
+Version: 0.5.1
 Section: admin
 Priority: optional
 Maintainer: Ben de Graaff <ben@awoo.nl>
