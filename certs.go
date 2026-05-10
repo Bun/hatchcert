@@ -1,67 +1,103 @@
 package hatchcert
 
 import (
-	"bytes"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
-
-	"github.com/go-acme/lego/v4/certcrypto"
-	"github.com/go-acme/lego/v4/certificate"
 )
 
-const ValidityDays = 30
+const (
+	ValidityUnit             = time.Hour
+	TargetValidityPercentage = 30
+	ThreeDays                = time.Hour * 24 * 3
+)
 
 type Cert struct {
 	Name           string
 	Domains        []string
-	AuthMethod     string
 	PreferredChain string
+
+	Certs   []*x509.Certificate
+	Expired bool
 }
 
-func exp(fname string) (int, error) {
-	pemcerts, err := ioutil.ReadFile(fname)
-	if err != nil {
-		return 0, err
-	}
-	cs, err := certcrypto.ParsePEMBundle(pemcerts)
-	if err != nil {
-		return 0, err
-	}
-	for _, c := range cs {
-		if !c.IsCA {
-			days := time.Until(c.NotAfter) / (time.Hour * 24)
-			if days < 0 {
-				days = 0
-			}
-			return int(days), nil
-		}
-	}
-	return 0, io.EOF
-}
-
-func Active(path string, certs []Cert) {
+// ValidityPercentage returns the remaining validity of the first leaf
+// certificate in a bundle as a rough percentage. The case where a certificate
+// is not valid yet is not considered relevant.
+func ValidityPercentage(certs []*x509.Certificate) (time.Duration, int) {
+	now := time.Now()
 	for _, cert := range certs {
-		f := filepath.Join(path, "live", cert.Name, "fullchain")
-		days, err := exp(f)
-		if err != nil {
-			fmt.Fprint(os.Stderr, cert.Name, ": ", f, ": ", err, "\n")
-		} else {
-			fmt.Print(cert.Name, ": expires in ", days, " day(s)\n")
+		if !cert.IsCA {
+			d := cert.NotAfter.Sub(now)
+			if d < 0 {
+				d = 0
+			}
+			period := cert.NotAfter.Sub(cert.NotBefore)
+			pct := int((100 * d) / period)
+			if now.After(cert.NotAfter) {
+				pct = 100
+			} else if now.Before(cert.NotBefore) {
+				pct = 0
+			}
+			return d, pct
 		}
 	}
+	return 0, 0
 }
 
+func loadCerts(fname string) ([]*x509.Certificate, error) {
+	pemcerts, err := os.ReadFile(fname)
+	if err != nil {
+		return nil, err
+	}
+	return parsePEMBundle(pemcerts)
+}
+
+func parsePEMBundle(bundle []byte) ([]*x509.Certificate, error) {
+	var certs []*x509.Certificate
+	for {
+		var block *pem.Block
+		block, bundle = pem.Decode(bundle)
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		c, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		certs = append(certs, c)
+	}
+	if len(certs) == 0 {
+		return nil, fmt.Errorf("hatchcert: no certificates found in PEM bundle")
+	}
+	return certs, nil
+}
+
+func LoadCerts(path string, certs []Cert) []Cert {
+	for i, cert := range certs {
+		f := filepath.Join(path, "live", cert.Name, "fullchain")
+		cert.Certs, _ = loadCerts(f)
+		certs[i] = cert
+	}
+	return certs
+}
+
+// ScanCerts returns a list of desired certificates that either don't exist
+// yet, or are going to expire soon.
 func ScanCerts(path string, certs []Cert) ([]Cert, error) {
 	var errors MultiError
 	var issue []Cert
 	for _, cert := range certs {
 		f := filepath.Join(path, "live", cert.Name, "fullchain")
-		days, err := exp(f)
+		certs, err := loadCerts(f)
 		if err != nil {
+			// Something went wrong, we will consider this cert
 			if os.IsNotExist(err) {
 				issue = append(issue, cert)
 			} else {
@@ -69,41 +105,23 @@ func ScanCerts(path string, certs []Cert) ([]Cert, error) {
 			}
 			continue
 		}
-		if days < ValidityDays {
+		cert.Certs = certs
+		delta, pct := ValidityPercentage(certs)
+		if delta <= ThreeDays {
+			cert.Expired = true // Helper to skip ARI check
+		}
+		if pct < TargetValidityPercentage {
 			issue = append(issue, cert)
 		}
 	}
 	return issue, errors.Nil()
 }
 
-func Issue(a *AccountMeta, cert Cert) error {
-	request := certificate.ObtainRequest{
-		Domains:        cert.Domains,
-		PreferredChain: cert.PreferredChain,
-		Bundle:         false,
-		PrivateKey:     nil,
-		MustStaple:     false,
-	}
-
-	o := InterceptOutput()
-	defer o.Restore()
-	c, err := a.Client.Certificate.Obtain(request)
-	if err != nil {
-		o.Emit()
-		return err
-	}
-	store, err := storeCert(a.Path, cert.Name, c)
-	if err != nil {
-		return err
-	}
-	return updateLinks(a.Path, store, cert.Domains)
-}
-
-func storeCert(base, name string, cert *certificate.Resource) (string, error) {
+func storeCert(base, name string, certPEM, privPEM []byte) (string, error) {
 	certs := filepath.Join(base, "certs")
 	os.MkdirAll(certs, 0755)
 
-	storerel, err := ioutil.TempDir(certs, name+".")
+	storerel, err := os.MkdirTemp(certs, name+".")
 	if err != nil {
 		return "", err
 	}
@@ -115,43 +133,25 @@ func storeCert(base, name string, cert *certificate.Resource) (string, error) {
 	os.Chmod(store, 0755)
 
 	var errors MultiError
-	if cert.PrivateKey != nil {
-		err := ioutil.WriteFile(filepath.Join(store, "privkey"), cert.PrivateKey, 0644)
-		if err != nil {
+
+	if len(privPEM) > 0 {
+		if err := os.WriteFile(filepath.Join(store, "privkey"), privPEM, 0644); err != nil {
 			errors = append(errors, err)
 		}
 	}
 
-	var chain []byte
-	chain = append(chain, cert.Certificate...)
-	chain = append(chain, cert.IssuerCertificate...)
-	// In ACMEv2, the issuer is always included even if you don't request a
-	// bundle; filter duplicates manually
-	chain = dedupCerts(trailingNewline(chain))
-	err = ioutil.WriteFile(filepath.Join(store, "fullchain"), chain, 0644)
-	if err != nil {
+	chain := trailingNewline(certPEM)
+	if err := os.WriteFile(filepath.Join(store, "fullchain"), chain, 0644); err != nil {
 		errors = append(errors, err)
 	}
 
 	var combined []byte
 	combined = append(combined, chain...)
-	combined = append(combined, cert.PrivateKey...)
-	err = ioutil.WriteFile(filepath.Join(store, "combined"), combined, 0644)
-	if err != nil {
+	combined = append(combined, privPEM...)
+	if err := os.WriteFile(filepath.Join(store, "combined"), combined, 0644); err != nil {
 		errors = append(errors, err)
 	}
 
-	if cert.CertURL != "" || cert.CertStableURL != "" {
-		url := cert.CertStableURL
-		if url == "" {
-			url = cert.CertURL
-		}
-		urlb := []byte(url + "\n")
-		err := ioutil.WriteFile(filepath.Join(store, "url"), urlb, 0644)
-		if err != nil {
-			errors = append(errors, err)
-		}
-	}
 	return store, errors.Nil()
 }
 
@@ -160,8 +160,7 @@ func updateLinks(base, store string, domains []string) error {
 	live := filepath.Join(base, "live")
 	os.MkdirAll(live, 0755)
 	for _, domain := range domains {
-		err := replaceLink(live, store, domain)
-		if err != nil {
+		if err := replaceLink(live, store, domain); err != nil {
 			errors = append(errors, err)
 		}
 	}
@@ -173,25 +172,4 @@ func trailingNewline(b []byte) []byte {
 		return append(b, '\n')
 	}
 	return b
-}
-
-func dedupCerts(b []byte) (ret []byte) {
-	srch := []byte("\n-----END CERTIFICATE-----\n")
-	seen := map[string]bool{}
-	ptr := b
-	for {
-		c := bytes.Index(ptr, srch)
-		if c < 0 {
-			break
-		}
-		c += len(srch)
-		cert := string(ptr[:c])
-		ptr = ptr[c:]
-		if !seen[cert] {
-			seen[cert] = true
-			ret = append(ret, cert...)
-		}
-	}
-	ret = append(ret, ptr...)
-	return
 }

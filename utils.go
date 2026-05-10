@@ -8,7 +8,28 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 )
+
+const Day = time.Hour * 24
+
+func formatDuration(d time.Duration) string {
+	d = d.Truncate(time.Second)
+	var days int
+	if d >= Day {
+		days = int(d / Day)
+		d = (d - time.Duration(days)*Day).Truncate(time.Hour)
+	}
+	s := d.String()
+	if days > 0 {
+		s = fmt.Sprint(days, "d", s)
+	}
+	if strings.HasSuffix(s, "h0m0s") {
+		return strings.TrimSuffix(s, "0m0s")
+	}
+	return s
+}
 
 func unmarshal(fname string, v interface{}) error {
 	b, err := ioutil.ReadFile(fname)
@@ -53,4 +74,13 @@ func replaceLink(dir, target, name string) error {
 		os.Remove(temp)
 	}
 	return err
+}
+
+func safePath(fname string) bool {
+	for _, s := range fname {
+		if s <= ' ' || s == '\\' || s == '/' || s == ':' {
+			return false
+		}
+	}
+	return fname != "" && fname != "." && fname != ".."
 }

@@ -1,15 +1,14 @@
 package hatchcert
 
 import (
-	"io/ioutil"
-	"net"
+	"fmt"
+	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
-	"github.com/go-acme/lego/v4/challenge"
-	"github.com/go-acme/lego/v4/challenge/http01"
-	"github.com/go-acme/lego/v4/providers/dns"
-	"github.com/go-acme/lego/v4/providers/http/webroot"
+	"github.com/mholt/acmez/v3"
+	"github.com/mholt/acmez/v3/acme"
 )
 
 type Configuration struct {
@@ -17,81 +16,131 @@ type Configuration struct {
 	AcceptedTOS    bool
 	Email          string
 	PreferredChain string
+	Profile        string
 	Certs          []Cert
-	UpdateHooks    [][]string
+	UpdateHooks    []string
 
-	Challenge struct {
-		HTTP []challenge.Provider
-		DNS  []challenge.Provider
-	}
+	WebServer string
+	dnsLookup map[string]dnsDomainConfig
+	Solvers   map[string]acmez.Solver
 }
 
-func Conf(fname string) (c Configuration) {
-	buf, _ := ioutil.ReadFile(fname)
+func Conf(fname string) (c Configuration, err error) {
+	buf, err := os.ReadFile(fname)
+	if err != nil {
+		return c, err
+	}
 	lines := strings.Split(string(buf), "\n")
+	c.Solvers = make(map[string]acmez.Solver)
 
-	for _, line := range lines {
+	c.dnsLookup = make(map[string]dnsDomainConfig)
+	var dnsConfig dnsDomainConfig
+
+	for lnum, line := range lines {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		parts := strings.Split(line, " ")
-		switch strings.ReplaceAll(parts[0], "_", "-") {
+		cmd, args, _ := strings.Cut(line, " ")
+		args = strings.Trim(args, " \t")
+		switch strings.ReplaceAll(cmd, "_", "-") {
 		case "acme-url":
-			c.ACME = parts[1]
+			fmt.Println("u", args)
+			c.ACME = args
 		case "accept-tos":
 			c.AcceptedTOS = true
 		case "email":
-			c.Email = parts[1]
+			c.Email = args
 		case "domain":
-			c.Certs = append(c.Certs, Cert{Name: parts[1], Domains: parts[1:]})
-		case "preferred-chain":
-			c.PreferredChain = strings.Join(parts[1:], " ")
-		case "update-hook":
-			// TODO: could do some more parsing
-			c.UpdateHooks = append(c.UpdateHooks, parts[1:])
-
-		case "webroot":
-			// TODO: this provider is retarded and writes to
-			// "./.well-known/acme-challenge/XXX" in the given path
-			// TODO: make relative to main dir
-			// TODO: the directory must exist
-			os.MkdirAll(parts[1], 0755)
-			p, err := webroot.NewHTTPProvider(parts[1])
-			if err != nil {
-				panic(err)
+			if args == "" {
+				return c, fmt.Errorf("line %v: domain keyword requires one or more domains", lnum+1)
 			}
-			c.Challenge.HTTP = append(c.Challenge.HTTP, p)
+			parts := strings.Split(args, " ")
+			for i, part := range parts {
+				// We don't expect FQDN
+				parts[i] = strings.TrimRight(part, ".")
+			}
+			c.Certs = append(c.Certs, Cert{Name: parts[0], Domains: parts})
+			if dnsConfig.Nameserver != "" {
+				for _, n := range parts {
+					c.dnsLookup[strings.TrimPrefix(n, "*.")] = dnsConfig
+				}
+			}
+		case "preferred-chain":
+			c.PreferredChain = args
+		case "profile":
+			c.Profile = args
+		case "update-hook":
+			c.UpdateHooks = append(c.UpdateHooks, args)
+
+		// Challenge solvers
+		case "httpdir":
+			os.MkdirAll(args, 0755)
+			c.Solvers[acme.ChallengeTypeHTTP01] = &webrootSolver{
+				root: args,
+			}
+		case "webroot":
+			// Legacy
+			path := filepath.Join(args, ".well-known/acme-challenge")
+			os.MkdirAll(path, 0755)
+			c.Solvers[acme.ChallengeTypeHTTP01] = &webrootSolver{
+				root: path,
+			}
 
 		case "http":
 			listen := ":80"
-			if len(parts) > 1 {
-				listen = parts[1]
+			if args != "" {
+				listen = args
 			}
-			host, port, err := net.SplitHostPort(listen)
-			if err != nil {
-				panic(err)
+			c.WebServer = listen
+			c.Solvers[acme.ChallengeTypeHTTP01] = &httpSolver{
+				listen: listen,
 			}
-			p := http01.NewProviderServer(host, port)
-			c.Challenge.HTTP = append(c.Challenge.HTTP, p)
 
 		case "env":
-			kv := strings.SplitN(parts[1], "=", 2)
-			if err := os.Setenv(kv[0], kv[1]); err != nil {
-				panic(err)
-			}
+			slog.Warn("Deprecated option `env` has no effect",
+				"line", lnum+1)
 
 		case "dns":
-			// TODO: postpone since it relies on env
-			provider, err := dns.NewDNSChallengeProviderByName(parts[1])
-			if err != nil {
-				panic(err)
+			parts := strings.Split(args, " ")
+			if _arg(parts, 0) == "persist" {
+				c.Solvers["dns-persist-01"] = dnsPersist01{}
+			} else if _arg(parts, 0) == "rfc2136" {
+				// TODO: multiple different solvers
+
+				c.Solvers[acme.ChallengeTypeDNS01] = &dnsSolver{
+					lookup: c.dnsLookup,
+				}
+				dnsConfig.Nameserver = nameserverAddr(_arg(parts, 1))
+				dnsConfig.Zone = _arg(parts, 2)
+			} else {
+				return c, fmt.Errorf("line %v: unsupported DNS provider %q",
+					lnum+1, _arg(parts, 0))
 			}
-			c.Challenge.DNS = append(c.Challenge.DNS, provider)
+
+		case "tsig":
+			parts := strings.Split(args, " ")
+			if l := len(parts); l != 2 && l != 3 {
+				return c, fmt.Errorf("line %v: expected: tsig <key> <secret> (algo)",
+					lnum+1)
+			}
+			dnsConfig.KeyName = trailingDot(_arg(parts, 0))
+			dnsConfig.Secret = _arg(parts, 1)
+			if alg := _arg(parts, 2); alg != "" {
+				dnsConfig.Algo = trailingDot(alg)
+			}
 
 		default:
-			panic(line)
+			return c, fmt.Errorf("line %v: unsupported keyword %q",
+				lnum+1, cmd)
 		}
 	}
 
 	return
+}
+
+func _arg(args []string, i int) string {
+	if i >= len(args) {
+		return ""
+	}
+	return args[i]
 }

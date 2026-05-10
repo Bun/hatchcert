@@ -2,66 +2,47 @@ package hatchcert
 
 import (
 	"bytes"
-	"fmt"
+	"io"
+	"log/slog"
 	"os"
-
-	"github.com/go-acme/lego/v4/log"
+	"sync"
 )
 
-type LegoOutput struct {
-	Previous log.StdLogger
-	Output   bytes.Buffer
+type Logger struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
 }
 
-func (l *LegoOutput) Emit() {
-	os.Stderr.Write(l.Output.Bytes())
+func (l *Logger) Write(p []byte) (n int, err error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.Write(p)
 }
 
-func (l *LegoOutput) write(pfx, msg string) {
-	l.Output.Write([]byte(pfx + msg + "\n"))
-}
-
-func (l *LegoOutput) Fatal(args ...interface{}) {
-	l.write("fatal: ", fmt.Sprint(args...))
-}
-
-func (l *LegoOutput) Fatalln(args ...interface{}) {
-	l.write("fatal: ", fmt.Sprintln(args...))
-}
-
-func (l *LegoOutput) Fatalf(format string, args ...interface{}) {
-	l.write("fatal: ", fmt.Sprintf(format, args...))
-}
-
-func (l *LegoOutput) Print(args ...interface{}) {
-	l.write("", fmt.Sprint(args...))
-}
-
-func (l *LegoOutput) Println(args ...interface{}) {
-	l.write("", fmt.Sprintln(args...))
-}
-
-func (l *LegoOutput) Printf(format string, args ...interface{}) {
-	l.write("", fmt.Sprintf(format, args...))
-}
-
-func (l *LegoOutput) Warnf(format string, args ...interface{}) {
-	l.write("warning: ", fmt.Sprintf(format, args...))
-}
-
-func (l *LegoOutput) Infof(format string, args ...interface{}) {
-	l.write("info: ", fmt.Sprintf(format, args...))
-}
-
-func (l *LegoOutput) Restore() {
-	if l.Previous != nil {
-		log.Logger = l.Previous
-		l.Previous = nil
+func (l *Logger) Emit() {
+	if l != nil {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		os.Stdout.Write(l.buf.Bytes())
+		l.buf.Reset()
 	}
 }
 
-func InterceptOutput() *LegoOutput {
-	o := &LegoOutput{Previous: log.Logger}
-	log.Logger = o
-	return o
+func SetupLogger(verbose bool) *Logger {
+	var w io.Writer
+	var l *Logger
+	var opts *slog.HandlerOptions
+	if verbose {
+		w = os.Stderr
+		opts = &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		}
+	} else {
+		// If not verbose, we only output on error
+		l = &Logger{}
+		w = l
+	}
+	logger := slog.New(slog.NewTextHandler(w, opts))
+	slog.SetDefault(logger)
+	return l
 }

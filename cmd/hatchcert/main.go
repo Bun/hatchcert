@@ -2,17 +2,21 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
+	"log/slog"
+	"net/http"
 	"os"
+	"time"
 
 	"awoo.nl/hatchcert"
 )
 
-// TODO:
-//
 // hatchcert
 //     Ensure all certificates listed in the configuration file are within the
 //     desired validity period.
+//
+// TODO:
 //
 // hatchcert account
 //     Perform account registration and key management.
@@ -26,9 +30,17 @@ import (
 func main() {
 	path := flag.String("path", "/var/lib/acme", "Output directory")
 	cfile := flag.String("conf", "/etc/hatchcert/config", "Config file")
+	verbose := flag.Bool("v", false, "Always print log")
 	flag.Parse()
 
-	conf := hatchcert.Conf(*cfile)
+	logbuf := hatchcert.SetupLogger(*verbose)
+
+	conf, err := hatchcert.Conf(*cfile)
+	if err != nil {
+		logbuf.Emit()
+		fmt.Fprintln(os.Stderr, "Configuration error:", err)
+		os.Exit(1)
+	}
 	if !conf.AcceptedTOS {
 		log.Fatalln("You must accept the terms of service")
 	}
@@ -36,7 +48,6 @@ func main() {
 		log.Fatalln("Email is required")
 	}
 
-	var err error
 	var want []hatchcert.Cert
 	hook := false
 
@@ -48,15 +59,17 @@ func main() {
 			log.Println("ScanCerts:", err)
 		}
 
-		if len(want) == 0 {
-			// Nothing to do
-			return
+	case "issue":
+		want = hatchcert.LoadCerts(*path, conf.Certs)
+		// Skip any expiration checks
+		for i, w := range want {
+			w.Expired = true
+			want[i] = w
 		}
 
-	case "issue":
-		want = conf.Certs
-
 	case "account":
+		hatchcert.AccountInfo(*path, conf)
+		return
 
 	case "status":
 		hatchcert.Active(*path, conf.Certs)
@@ -69,55 +82,78 @@ func main() {
 		log.Fatalf("Unknown command: %v", opt)
 	}
 
+	if len(conf.Solvers) == 0 {
+		log.Fatalln("Cannot issue certificates without challenge method")
+	}
+
 	if err := os.MkdirAll(*path, 0755); err != nil {
 		log.Fatalln(err)
 	}
 
-	account := hatchcert.Account(*path)
-	if err := hatchcert.Setup(account, conf.ACME, conf.Email); err != nil {
-		log.Fatalln(err)
+	failed := false
+	h := hatchcert.New(*path, conf)
+	if err := h.EnsureAccount(); err != nil {
+		failed = true
+		slog.Error("Failed to obtain ACME account",
+			"err", err)
+		goto uhoh
 	}
-
-	if len(want) == 0 {
-		return
-	}
-
-	if len(conf.Challenge.HTTP)+len(conf.Challenge.DNS) == 0 {
-		log.Fatalln("Cannot issue certificates without challenge method")
-	}
-
-	must := func(err error) {
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	must(hatchcert.ChallengesHTTP(account.Client, conf.Challenge.HTTP))
-	must(hatchcert.ChallengesDNS(account.Client, conf.Challenge.DNS))
 
 	// Default action: create or refresh certs
-	failed := false
-	issued := false
-	for _, req := range want {
-		req.PreferredChain = conf.PreferredChain // FIXME
-		err := hatchcert.Issue(account, req)
-		if err != nil {
-			failed = true
-			log.Println("Failed to issue:", err)
-		} else {
-			issued = true
+	if len(want) == 0 {
+		slog.Debug("No certificates to issue")
+	} else {
+		if conf.WebServer != "" {
+			srv := http.Server{
+				Addr:              conf.WebServer,
+				Handler:           hatchcert.Mux,
+				ReadTimeout:       time.Minute,
+				ReadHeaderTimeout: time.Minute,
+				WriteTimeout:      time.Minute,
+				IdleTimeout:       time.Minute,
+			}
+			// TODO: avoid racing things and create listener first
+			go func() {
+				err := srv.ListenAndServe()
+				if err != nil {
+					log.Fatalln("WebServer setup failed:", err)
+				}
+			}()
 		}
-	}
 
-	if issued && hook {
-		for _, hook := range conf.UpdateHooks {
-			if err := hatchcert.Hook(hook); err != nil {
-				log.Println("Failed to run update hook:", err)
+		issued := false
+		for _, req := range want {
+			req.PreferredChain = conf.PreferredChain // FIXME
+			if !req.Expired && !h.NeedsRenewal(req) {
+				slog.Debug("Certificate does not need renewal",
+					"domains", req.Domains)
+				continue
+			}
+			err := h.Issue(req)
+			if err != nil {
 				failed = true
+				log.Println("Failed to issue:", err)
+			} else {
+				slog.Info("Issued certificate",
+					"domains", req.Domains)
+				issued = true
+			}
+		}
+
+		if issued && hook {
+			for _, hook := range conf.UpdateHooks {
+				if err := hatchcert.Hook(hook); err != nil {
+					log.Println("Failed to run update hook:", err)
+					failed = true
+				}
 			}
 		}
 	}
 
+uhoh:
+	if failed || *verbose {
+		logbuf.Emit()
+	}
 	if failed {
 		os.Exit(1)
 	}

@@ -1,30 +1,56 @@
-# Specify the ACME service to use
-# hatchcert will use Let's Encrypt production by default
-#acme_url https://acme-staging-v02.api.letsencrypt.org/directory
-
-# Confirm that you have read and accepted the terms of service of the ACME
-# service
+# Required: Confirm that you have read and accepted the terms of service of the
+# ACME service
 #accept_tos
 
-# Specify an email that will be used to contact you, e.g. when your
-# certificate is about to expire
+# Required: Specify an email that will be used to contact you
 #email hostmaster@example.com
 
-# Use built-in HTTP server (listen on :80 by default); useful when
-# bootstrapping
+# Optional: Specify the ACME service to use
+# hatchcert will use Let's Encrypt production by default
+# Also accepted: prod | staging | pebble
+#acme_url https://acme-staging-v02.api.letsencrypt.org/directory
+
+# Optional: Specify which certificate profile to use.
+# See https://letsencrypt.org/docs/profiles/ for more information
+#profile shortlived
+
+# Optional: specify which chain you prefer; pick the common name of an
+# intermediary or root certificate.
+# See https://letsencrypt.org/certificates/ for more information
+#preferred-chain ISRG Root X1
+
+
+#
+## Challenge solvers
+#
+
+# Currently HTTP-01 is the only supported challenge method. Specificy a method
+# to solve it:
+
+# Use built-in HTTP server (listens on :80 by default; specify a different
+# address if needed); note that hatchcert may need elevated permissions to
+# listen on low ports!
 #http
 
-# Specify the root directory for the HTTP challenge solver
-#webroot /run/acme
+# Have an existing webserver serve this directory under
+# "/.well-known/acme-challenge/" for each domain
+#httpdir /run/acme
 
-# Optionally specify which chain you prefer
-#preferred-chain ISRG Root X1
+
+#
+## Certificates
+#
 
 # Specify domains to issue certificates for
 #domain example.com
 
 # You can also request multiple names in one certificate
 #domain example.net www.example.net
+
+
+#
+## Hooks
+#
 
 # Optionally specify an executable file that will be called if, during
 # reconcile, a certificate was updated. This is typically used in order to

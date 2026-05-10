@@ -3,7 +3,7 @@
 Hatchcert is a config-driven tool to issue certificates using the ACME protocol.
 It is intended to be easily deployable using configuration management systems
 such as Ansible.
-This tool is based on the [lego library](https://go-acme.github.io/lego/).
+This tool is based on [acmez](https://github.com/mholt/acmez).
 
 
 ## Getting started
@@ -12,33 +12,59 @@ Build hatchcert using `make hatchcert` or create a deb file using `make deb`.
 
 Create a configuration file, by default located in `/etc/hatchcert/config`:
 
-    # Specify the ACME service to use
+    # Required: Confirm that you have read and accepted the terms of service of the
+    # ACME service
+    #accept_tos
+
+    # Required: Specify an email that will be used to contact you
+    #email hostmaster@example.com
+
+    # Optional: Specify the ACME service to use
     # hatchcert will use Let's Encrypt production by default
-    #acme-url https://acme-staging-v02.api.letsencrypt.org/directory
+    # Also accepted: prod | staging | pebble
+    #acme_url https://acme-staging-v02.api.letsencrypt.org/directory
 
-    # Confirm that you have read and accepted the terms of service of the ACME
-    # service
-    #accept-tos
+    # Optional: Specify which certificate profile to use.
+    # See https://letsencrypt.org/docs/profiles/ for more information
+    #profile shortlived
 
-    # Specify an email that will be used to contact you, e.g. when your
-    # certificate is about to expire
-    email hostmaster@example.com
-
-    # Use built-in HTTP server (listen on :80 by default); useful when
-    # bootstrapping
-    #http
-
-    # Specify the root directory for the HTTP challenge solver
-    webroot /run/acme
-
-    # Optionally specify which chain you prefer
+    # Optional: specify which chain you prefer; pick the common name of an
+    # intermediary or root certificate.
+    # See https://letsencrypt.org/certificates/ for more information
     #preferred-chain ISRG Root X1
 
+
+    #
+    ## Challenge solvers
+    #
+
+    # Currently HTTP-01 is the only supported challenge method. Specificy a method
+    # to solve it:
+
+    # Use built-in HTTP server (listens on :80 by default; specify a different
+    # address if needed); note that hatchcert may need elevated permissions to
+    # listen on low ports!
+    #http
+
+    # Have an existing webserver serve this directory under
+    # "/.well-known/acme-challenge/" for each domain
+    #httpdir /run/acme
+
+
+    #
+    ## Certificates
+    #
+
     # Specify domains to issue certificates for
-    domain example.com
+    #domain example.com
 
     # You can also request multiple names in one certificate
-    domain example.net www.example.net
+    #domain example.net www.example.net
+
+
+    #
+    ## Hooks
+    #
 
     # Optionally specify an executable file that will be called if, during
     # reconcile, a certificate was updated. This is typically used in order to
@@ -47,7 +73,8 @@ Create a configuration file, by default located in `/etc/hatchcert/config`:
     #update-hook /etc/hatchcert/update-hook
 
 
-Hatchcert is currently in development.
+While Hatchcert is somewhat of an "in development" project, I've been using it
+as sole solution to issue LE certificates on my own infrastructure since early 2020.
 To get started:
 
 * Create the appropriate configuration in `/etc/hatchcert/config`
@@ -86,7 +113,6 @@ other tools, such as acmetool:
 
 * Helper tool to read and accept the terms of service
 * Private key permissions
-* Migrate away from lego
 
 
 ## ACME challenge solvers
@@ -102,17 +128,15 @@ used.
 
 ### HTTP (http-01) using an external webserver
 
-Hatchcert can write HTTP challenge files to a webroot using the `webroot`
+Hatchcert can write HTTP challenge files to a directory using the `httpdir`
 keyword.
-A subdirectory called `.well-known/acme-challenge/` will be created relative to
-this directory, which needs to be served over HTTP/HTTPS.
 
 For example, to use the webroot challenge provider with nginx with
-`webroot /run/acme`, create `/etc/nginx/snippets/acme.conf` containing:
+`httpdir /run/acme`, create `/etc/nginx/snippets/acme.conf` containing:
 
     # Let's encrypt
     location /.well-known/acme-challenge/ {
-        alias /run/acme/.well-known/acme-challenge/;
+        alias /run/acme/;
     }
 
 Then, include this snippet in every server block you want to issue certificates
@@ -131,40 +155,43 @@ for.  For example:
         root /var/www/example.com/htdocs;
     }
 
+Deprecation notice: A legacy keyword `webroot` exists that creates a
+subdirectory called `.well-known/acme-challenge/` relative to the configured
+path. This behavior was undesired and is no longer supported. You can
+replicate the behavior by simply appending `.well-known/acme-challenge` to the
+`httpdir` keyword.
+
 
 ### DNS (dns-01)
 
-Hatchcert supports the numerous DNS providers that the lego library supports.
-Refer to the documentation at https://go-acme.github.io/lego/dns/ for the names
-of the providers and their required configuration.
-Specify the name/code of the provider using the `dns` keyword and specify
-required environment values using the `env` keyword.
+Due to the lack of support for a general DNS updating protocol supported by most
+DNS providers, DNS-01 is only supported through RFC 2136 support.
+
+An example configuration may look like:
+
+    # dns rfc2136 <nameserver> <optional:zone>
+    dns rfc2136 ns.example.com
+    # tsig <keyname> <secret> <optional:algo>
+    tsig updatekey c2VjcmV0LXRoaXMtaXMtbm90LXNlY3VyZQ==
+    domain example.com www.example.com
+
+The `domain` keyword will use the last `dns` and `tsig` values configured,
+allowing multiple independent domains. If any domains do not require `tsig`
+(not recommended), configure them before any that do.
+If you do not specify the zone name, it will be derived from the nearest SOA of
+the domains being issued.
 
 
-#### ACME DNS example
+### Zero-configuration DNS (dns-persist-01)
 
-The following example shows how to use the ACME DNS provider:
+This DNS challenge requires persistent DNS record, which means that no DNS
+entries need to be made during normal Hatchcert operation.
+See: https://letsencrypt.org/2026/02/18/dns-persist-01
 
-    # The provider is configured via environment variables
-    env ACME_DNS_API_BASE=https://dnsauth.example.com/
-    env ACME_DNS_STORAGE_PATH=/etc/hatchcert/acmedns.json
-    dns acme-dns
+An example configuration may look like:
 
-    domain *.example.com
+    dns persist
+    domain example.org
 
-You can place preexisting ACME DNS credentials in
-`/etc/hatchcert/acmedns.json`:
-
-    {"example.com": {
-       "fulldomain": "04b30265-01ad-4275-88f2-3aaffe62d61e.dnsauth.example.com",
-       "subdomain": "04b30265-01ad-4275-88f2-3aaffe62d61e",
-       "username": "myusername",
-       "password": "justAnExample"
-    }}
-
-Notes:
-
-* For wildcard certificates, the domain name in the `acmedns.json` config is
-  without the wildcard
-* The library lego uses for ACME DNS (goacmedns) has changed the format of the
-  credentials file in a without backwards compatibility (lowercase keys)
+You can obtain the necessary account URL through the `hatchcert account`
+command or by inspecting `/var/lib/acme/account`.
