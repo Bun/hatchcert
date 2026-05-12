@@ -1,0 +1,18 @@
+# This example shows how to use a custom script to configure DNS entries for
+# the DNS-01 challenge.
+
+accept_tos
+email hostmaster@example.com
+
+# The custom script is called in the following order:
+#
+#   /opt/acme/cf-dns-util.py present
+#       Configure the DNS record
+#   /opt/acme/cf-dns-util.py wait
+#       Optional: wait for DNS propagation (or just immediately return)
+#   /opt/acme/cf-dns-util.py cleanup
+#       Remove the DNS record
+#
+# See examples/cf-dns-util.py for its example implementation
+dns exec /opt/acme/cf-dns-util.py
+domain www.example.com

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/mholt/acmez/v3"
 	"github.com/mholt/acmez/v3/acme"
@@ -36,6 +37,9 @@ func Conf(fname string) (c Configuration, err error) {
 	c.dnsLookup = make(map[string]dnsDomainConfig)
 	var dnsConfig dnsDomainConfig
 
+	dnsSolvers := newMultisolver()
+	var activeSolver func() acmez.Solver
+
 	for lnum, line := range lines {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -44,7 +48,6 @@ func Conf(fname string) (c Configuration, err error) {
 		args = strings.Trim(args, " \t")
 		switch strings.ReplaceAll(cmd, "_", "-") {
 		case "acme-url":
-			fmt.Println("u", args)
 			c.ACME = args
 		case "accept-tos":
 			c.AcceptedTOS = true
@@ -60,9 +63,10 @@ func Conf(fname string) (c Configuration, err error) {
 				parts[i] = strings.TrimRight(part, ".")
 			}
 			c.Certs = append(c.Certs, Cert{Name: parts[0], Domains: parts})
-			if dnsConfig.Nameserver != "" {
+			if activeSolver != nil {
+				s := activeSolver()
 				for _, n := range parts {
-					c.dnsLookup[strings.TrimPrefix(n, "*.")] = dnsConfig
+					dnsSolvers.lookup[strings.TrimPrefix(n, "*.")] = s
 				}
 			}
 		case "preferred-chain":
@@ -103,15 +107,33 @@ func Conf(fname string) (c Configuration, err error) {
 		case "dns":
 			parts := strings.Split(args, " ")
 			if _arg(parts, 0) == "persist" {
+				activeSolver = nil
 				c.Solvers["dns-persist-01"] = dnsPersist01{}
 			} else if _arg(parts, 0) == "rfc2136" {
-				// TODO: multiple different solvers
-
-				c.Solvers[acme.ChallengeTypeDNS01] = &dnsSolver{
-					lookup: c.dnsLookup,
+				activeSolver = func() acmez.Solver {
+					return dnsUpdate2136{
+						dnsPropagationHelper: dnsPropagationHelper{
+							PropagationTimeout: time.Minute,
+						},
+						cfg: dnsConfig,
+					}
 				}
+
+				c.Solvers[acme.ChallengeTypeDNS01] = dnsSolvers
 				dnsConfig.Nameserver = nameserverAddr(_arg(parts, 1))
 				dnsConfig.Zone = _arg(parts, 2)
+			} else if _arg(parts, 0) == "exec" {
+				if len(parts) == 1 {
+					return c, fmt.Errorf("line %v: `exec` requires a script name",
+						lnum+1)
+				}
+				cmd := strings.TrimPrefix(args, "exec ")
+				activeSolver = func() acmez.Solver {
+					return execSolver{
+						command: cmd,
+					}
+				}
+				c.Solvers[acme.ChallengeTypeDNS01] = dnsSolvers
 			} else {
 				return c, fmt.Errorf("line %v: unsupported DNS provider %q",
 					lnum+1, _arg(parts, 0))

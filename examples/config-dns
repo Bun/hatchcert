@@ -1,0 +1,28 @@
+# This example shows how DNS-01 challenges can be configured. It also shows how
+# multiple DNS entries affect each other.
+
+accept_tos
+email hostmaster@example.com
+
+
+# This example does not use authentication; perhaps the local DNS server is a
+# proxy that handle things on its own
+dns rfc2136 localhost:5353
+domain localnet.example.com
+
+
+# A certificate with multiple names (in the same zone)
+dns rfc2136 ns.example.net
+tsig examplewww dmVyeSBzZWNyZXQ=
+domain example.net www.example.net
+
+
+# This example uses a different TSIG algorithm
+dns rfc2136 ns1.example.com
+tsig exacom ZXhhbXBsZS5jb21zZWNyZXQ= hmac-sha512
+domain *.example.com
+
+# ... uses the same nameserver as the previous entry, with different
+# credentials
+tsig orgusr GFzc3dvcmQ=
+domain *.example.org

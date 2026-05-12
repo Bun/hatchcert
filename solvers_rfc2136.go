@@ -24,24 +24,19 @@ type dnsDomainConfig struct {
 	Algo string
 }
 
-// dnsSolver implements a DNS-01 challenge solver using RFC 2136 dynamic DNS
+// dnsUpdate2136 implements a DNS-01 challenge solver using RFC 2136 dynamic DNS
 // updates.
-type dnsSolver struct {
+type dnsUpdate2136 struct {
 	dnsPropagationHelper
-	lookup map[string]dnsDomainConfig
+	cfg dnsDomainConfig
 }
 
 // Present creates the DNS TXT record required to satisfy the DNS-01 challenge.
-func (s dnsSolver) Present(ctx context.Context, challenge acme.Challenge) error {
-	cfg, ok := s.lookup[challenge.Identifier.Value]
-	if !ok {
-		return fmt.Errorf("rfc2136: unconfigured domain %q", challenge.Identifier.Value)
-	}
-
+func (s dnsUpdate2136) Present(ctx context.Context, challenge acme.Challenge) error {
 	fqdn := trailingDot(challenge.DNS01TXTRecordName())
 	value := challenge.DNS01KeyAuthorization()
 
-	if err := s.upsertTXT(ctx, cfg, fqdn, value, true); err != nil {
+	if err := s.upsertTXT(ctx, s.cfg, fqdn, value, true); err != nil {
 		return fmt.Errorf("rfc2136: present %q: %w", challenge.Identifier.Value, err)
 	}
 
@@ -49,14 +44,9 @@ func (s dnsSolver) Present(ctx context.Context, challenge acme.Challenge) error 
 }
 
 // Wait until the DNS record has propagated.
-func (s dnsSolver) Wait(ctx context.Context, challenge acme.Challenge) error {
+func (s dnsUpdate2136) Wait(ctx context.Context, challenge acme.Challenge) error {
 	if s.PropagationTimeout > 0 {
-		cfg, ok := s.lookup[challenge.Identifier.Value]
-		if !ok {
-			return fmt.Errorf("rfc2136: unconfigured domain %q", challenge.Identifier.Value)
-		}
-
-		ns := cfg.Nameserver
+		ns := s.cfg.Nameserver
 		fqdn := trailingDot(challenge.DNS01TXTRecordName())
 		value := challenge.DNS01KeyAuthorization()
 		if err := s.waitForPropagation(ctx, ns, fqdn, value); err != nil {
@@ -68,16 +58,11 @@ func (s dnsSolver) Wait(ctx context.Context, challenge acme.Challenge) error {
 }
 
 // CleanUp removes the DNS TXT record after the challenge has been completed.
-func (s dnsSolver) CleanUp(ctx context.Context, challenge acme.Challenge) error {
-	cfg, ok := s.lookup[challenge.Identifier.Value]
-	if !ok {
-		return fmt.Errorf("rfc2136: unconfigured domain %q", challenge.Identifier.Value)
-	}
-
+func (s dnsUpdate2136) CleanUp(ctx context.Context, challenge acme.Challenge) error {
 	fqdn := trailingDot(challenge.DNS01TXTRecordName())
 	value := challenge.DNS01KeyAuthorization()
 
-	if err := s.upsertTXT(ctx, cfg, fqdn, value, false); err != nil {
+	if err := s.upsertTXT(ctx, s.cfg, fqdn, value, false); err != nil {
 		return fmt.Errorf("rfc2136: cleanup %s: %w", fqdn, err)
 	}
 	return nil
@@ -85,7 +70,7 @@ func (s dnsSolver) CleanUp(ctx context.Context, challenge acme.Challenge) error 
 
 // upsertTXT adds (insert=true) or removes (insert=false) a TXT record via
 // RFC 2136 DNS UPDATE.
-func (s dnsSolver) upsertTXT(ctx context.Context, cfg dnsDomainConfig, fqdn, value string, insert bool) error {
+func (s dnsUpdate2136) upsertTXT(ctx context.Context, cfg dnsDomainConfig, fqdn, value string, insert bool) error {
 	// TODO: probably not as part of parsing configuration
 	zone := cfg.Zone
 	if zone == "" {
@@ -123,7 +108,7 @@ func (s dnsSolver) upsertTXT(ctx context.Context, cfg dnsDomainConfig, fqdn, val
 
 // sendUpdate transmits a DNS UPDATE message to the configured nameserver,
 // optionally authenticating it with TSIG.
-func (s dnsSolver) sendUpdate(ctx context.Context, cfg dnsDomainConfig, msg *dns.Msg) error {
+func (s dnsUpdate2136) sendUpdate(ctx context.Context, cfg dnsDomainConfig, msg *dns.Msg) error {
 	client := &dns.Client{Net: "tcp"}
 
 	if cfg.KeyName != "" {
