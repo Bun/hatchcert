@@ -141,7 +141,7 @@ func (h *Hatcher) Issue(cert Cert) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
-	certPrivateKey, err := generateECKey()
+	certPrivateKey, err := generateKey(cert.KeyType)
 	if err != nil {
 		return err
 	}
@@ -181,12 +181,12 @@ func (h *Hatcher) Issue(cert Cert) error {
 		return ErrNothingIssued
 	}
 
-	encodedPrivKey := []byte(encodeECKey(certPrivateKey))
+	encodedPrivKey := encodePrivateKey(certPrivateKey)
 
 	name := cert.Domains[0]
 	use := certs[0]
 
-	if h.conf.PreferredChain != "" && len(certs) > 1 {
+	if cert.PreferredChain != "" && len(certs) > 1 {
 		// If the user prefers a certain chain, pick it if it exists. We allow
 		// a bit of flexibility to find either the root or intermediary; their
 		// names should be enough.
@@ -195,11 +195,11 @@ func (h *Hatcher) Issue(cert Cert) error {
 			cs, err := parsePEMBundle(issued.ChainPEM)
 			if err == nil {
 				for _, c := range cs {
-					if c.IsCA && c.Subject.CommonName == h.conf.PreferredChain {
+					if c.IsCA && c.Subject.CommonName == cert.PreferredChain {
 						use = issued
 						break findpref
 					}
-					if c.IsCA && c.Issuer.CommonName == h.conf.PreferredChain {
+					if c.IsCA && c.Issuer.CommonName == cert.PreferredChain {
 						use = issued
 						break findpref
 					}
@@ -243,7 +243,7 @@ func (h *Hatcher) EnsureAccount() error {
 		}
 		account.PrivateKey = pk
 		saved.Email = h.conf.Email
-		saved.AccountKey = encodeECKey(pk)
+		saved.AccountKey = string(encodeECKey(pk))
 		store = true
 	} else {
 		key, err := parseKey(saved.AccountKey)

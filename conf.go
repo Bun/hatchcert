@@ -13,13 +13,12 @@ import (
 )
 
 type Configuration struct {
-	ACME           string
-	AcceptedTOS    bool
-	Email          string
-	PreferredChain string
-	Profile        string
-	Certs          []Cert
-	UpdateHooks    []string
+	ACME        string
+	AcceptedTOS bool
+	Email       string
+	Profile     string
+	Certs       []Cert
+	UpdateHooks []string
 
 	WebServer string
 	dnsLookup map[string]dnsDomainConfig
@@ -39,6 +38,8 @@ func Conf(fname string) (c Configuration, err error) {
 
 	dnsSolvers := newMultisolver()
 	var activeSolver func() acmez.Solver
+	keytype := "p256"
+	chainpref := ""
 
 	for lnum, line := range lines {
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -53,6 +54,8 @@ func Conf(fname string) (c Configuration, err error) {
 			c.AcceptedTOS = true
 		case "email":
 			c.Email = args
+		case "key-type":
+			keytype = args
 		case "domain":
 			if args == "" {
 				return c, fmt.Errorf("line %v: domain keyword requires one or more domains", lnum+1)
@@ -62,7 +65,12 @@ func Conf(fname string) (c Configuration, err error) {
 				// We don't expect FQDN
 				parts[i] = strings.TrimRight(part, ".")
 			}
-			c.Certs = append(c.Certs, Cert{Name: parts[0], Domains: parts})
+			c.Certs = append(c.Certs, Cert{
+				Name:           parts[0],
+				Domains:        parts,
+				KeyType:        keytype,
+				PreferredChain: chainpref,
+			})
 			if activeSolver != nil {
 				s := activeSolver()
 				for _, n := range parts {
@@ -70,7 +78,7 @@ func Conf(fname string) (c Configuration, err error) {
 				}
 			}
 		case "preferred-chain":
-			c.PreferredChain = args
+			chainpref = args
 		case "profile":
 			c.Profile = args
 		case "update-hook":

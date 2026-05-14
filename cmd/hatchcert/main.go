@@ -123,7 +123,6 @@ func main() {
 
 		issued := false
 		for _, req := range want {
-			req.PreferredChain = conf.PreferredChain // FIXME
 			if !req.Expired && !h.NeedsRenewal(req) {
 				slog.Debug("Certificate does not need renewal",
 					"domains", req.Domains)

@@ -18,6 +18,7 @@ const (
 type Cert struct {
 	Name           string
 	Domains        []string
+	KeyType        string
 	PreferredChain string
 
 	Certs   []*x509.Certificate
