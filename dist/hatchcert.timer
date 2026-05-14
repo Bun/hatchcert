@@ -1,0 +1,10 @@
+[Unit]
+Description=Runs hatchcert.service daily with a random delay
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=7200
+Unit=hatchcert.service
+
+[Install]
+WantedBy=timers.target

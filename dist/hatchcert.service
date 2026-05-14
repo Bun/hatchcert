@@ -1,0 +1,6 @@
+[Unit]
+Description=Issue certificates with hatchcert as needed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/hatchcert reconcile
