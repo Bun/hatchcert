@@ -8,27 +8,36 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
 const Day = time.Hour * 24
 
 func formatDuration(d time.Duration) string {
-	d = d.Truncate(time.Second)
-	var days int
-	if d >= Day {
-		days = int(d / Day)
-		d = (d - time.Duration(days)*Day).Truncate(time.Hour)
+	if d <= 0 {
+		return "-"
 	}
-	s := d.String()
-	if days > 0 {
-		s = fmt.Sprint(days, "d", s)
+	d = d.Truncate(time.Minute)
+	days := int(d / Day)
+	if days > 3 {
+		return fmt.Sprint(days, "d")
 	}
-	if strings.HasSuffix(s, "h0m0s") {
-		return strings.TrimSuffix(s, "0m0s")
+	remaining := d - time.Duration(days)*Day
+	hours := int(remaining.Hours())
+	if days > 1 {
+		if hours == 0 {
+			return fmt.Sprint(days, "d")
+		}
+		return fmt.Sprint(days, "d", hours, "h")
 	}
-	return s
+	minutes := int(remaining.Minutes()) % 60
+	if hours == 0 {
+		return fmt.Sprint(minutes, "m")
+	}
+	if minutes == 0 {
+		return fmt.Sprint(hours, "h")
+	}
+	return fmt.Sprint(hours, "h", minutes, "m")
 }
 
 func unmarshal(fname string, v interface{}) error {

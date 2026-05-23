@@ -36,12 +36,12 @@ func ValidityPercentage(certs []*x509.Certificate) (time.Duration, int) {
 			if d < 0 {
 				d = 0
 			}
-			period := cert.NotAfter.Sub(cert.NotBefore)
-			pct := int((100 * d) / period)
-			if now.After(cert.NotAfter) {
-				pct = 100
-			} else if now.Before(cert.NotBefore) {
-				pct = 0
+			ds := int(d / time.Second)
+			pct := 0
+			if period := int(cert.NotAfter.Sub(cert.NotBefore) / time.Second); period > 0 {
+				if pct = 100 * ds / period; pct > 100 {
+					pct = 100
+				}
 			}
 			return d, pct
 		}
