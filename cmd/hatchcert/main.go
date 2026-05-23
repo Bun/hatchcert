@@ -61,6 +61,21 @@ func main() {
 
 	case "issue":
 		want = hatchcert.LoadCerts(*path, conf.Certs)
+
+		// Filter to only specified names if any args provided
+		names := flag.Args()[1:]
+		if len(names) > 0 {
+			var filtered []hatchcert.Cert
+			for _, n := range names {
+				for _, w := range want {
+					if w.Name == n {
+						filtered = append(filtered, w)
+					}
+				}
+			}
+			want = filtered
+		}
+
 		// Skip any expiration checks
 		for i, w := range want {
 			w.Expired = true
