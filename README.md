@@ -78,11 +78,11 @@ as sole solution to issue LE certificates on my own infrastructure since early 2
 To get started:
 
 * Create the appropriate configuration in `/etc/hatchcert/config`
-* Run `hatchcert` once by hand, if you want to check if your configuration is
+* Run `hatchcert` once by hand if you want to check if your configuration is
   valid; this will immediately register an account with the ACME server
 * Optionally copy the update-hook script from `dist/update-hook` to `/etc/hatchcert/update-hook`
-* Copy the cronjob from `dist/hatchcert.cron` to
-  `/etc/cron.d/hatchcert` (adjust the cron schedule as required)
+* Enable the systemd timer with `systemctl enable --now hatchcert.timer` (not using
+  the deb version? `cp dist/hatchcert.{service,timer} /ur/lib/systemd/system`)
 
 
 
