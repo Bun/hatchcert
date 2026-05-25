@@ -7,16 +7,18 @@ on:
 jobs:
   build-and-upload:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Build the .deb package
         run: |
           make deb
 
       - name: Upload .deb to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             *.deb
