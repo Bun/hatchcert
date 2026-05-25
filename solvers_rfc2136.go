@@ -80,9 +80,10 @@ func (s dnsUpdate2136) upsertTXT(ctx context.Context, cfg dnsDomainConfig, fqdn,
 		}
 	}
 
-	slog.Info("upsertTXT",
+	slog.Debug("Upsert TXT record",
 		"fqdn", fqdn,
-		"zone", cfg.Zone)
+		"zone", cfg.Zone,
+		"value", value)
 
 	rr := &dns.TXT{
 		Hdr: dns.RR_Header{

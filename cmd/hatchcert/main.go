@@ -33,7 +33,19 @@ func main() {
 	verbose := flag.Bool("v", false, "Always print log")
 	flag.Parse()
 
-	logbuf := hatchcert.SetupLogger(*verbose)
+	level := hatchcert.LogOnlyImporant
+
+	// Check if we're running as cron and not as systemd unit
+	_, hasInvocationID := os.LookupEnv("INVOCATION_ID")
+	_, hasTerm := os.LookupEnv("TERM")
+	if !hasTerm && !hasInvocationID {
+		level = hatchcert.LogSilent
+	}
+	if *verbose {
+		level = hatchcert.LogVerbose
+	}
+
+	logbuf := hatchcert.SetupLogger(level)
 
 	conf, err := hatchcert.Conf(*cfile)
 	if err != nil {
@@ -148,7 +160,7 @@ func main() {
 				failed = true
 				log.Println("Failed to issue:", err)
 			} else {
-				slog.Info("Issued certificate",
+				logbuf.Important("Issued certificate",
 					"domains", req.Domains)
 				issued = true
 			}
@@ -165,7 +177,8 @@ func main() {
 	}
 
 uhoh:
-	if failed || *verbose {
+	if failed && logbuf != nil {
+		// Always provide details on failure
 		logbuf.Emit()
 	}
 	if failed {
