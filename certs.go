@@ -9,11 +9,7 @@ import (
 	"time"
 )
 
-const (
-	ValidityUnit             = time.Hour
-	TargetValidityPercentage = 30
-	ThreeDays                = time.Hour * 24 * 3
-)
+const ThreeDays = time.Hour * 24 * 3
 
 type Cert struct {
 	Name           string
@@ -25,10 +21,10 @@ type Cert struct {
 	Expired bool
 }
 
-// ValidityPercentage returns the remaining validity of the first leaf
-// certificate in a bundle as a rough percentage. The case where a certificate
-// is not valid yet is not considered relevant.
-func ValidityPercentage(certs []*x509.Certificate) (time.Duration, int) {
+// ValidityTime returns the remaining validity of the first leaf certificate in
+// a bundle. The case where a certificate is not valid yet is not considered
+// relevant.
+func ValidityTime(certs []*x509.Certificate) time.Duration {
 	now := time.Now()
 	for _, cert := range certs {
 		if !cert.IsCA {
@@ -36,17 +32,10 @@ func ValidityPercentage(certs []*x509.Certificate) (time.Duration, int) {
 			if d < 0 {
 				d = 0
 			}
-			ds := int(d / time.Second)
-			pct := 0
-			if period := int(cert.NotAfter.Sub(cert.NotBefore) / time.Second); period > 0 {
-				if pct = 100 * ds / period; pct > 100 {
-					pct = 100
-				}
-			}
-			return d, pct
+			return d
 		}
 	}
-	return 0, 0
+	return 0
 }
 
 func loadCerts(fname string) ([]*x509.Certificate, error) {
@@ -107,13 +96,11 @@ func ScanCerts(path string, certs []Cert) ([]Cert, error) {
 			continue
 		}
 		cert.Certs = certs
-		delta, pct := ValidityPercentage(certs)
-		if delta <= ThreeDays {
-			cert.Expired = true // Helper to skip ARI check
+		if validFor := ValidityTime(certs); validFor <= ThreeDays {
+			// Unconditional reissue
+			cert.Expired = true
 		}
-		if pct < TargetValidityPercentage {
-			issue = append(issue, cert)
-		}
+		issue = append(issue, cert)
 	}
 	return issue, errors.Nil()
 }

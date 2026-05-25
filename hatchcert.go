@@ -36,8 +36,8 @@ func Active(path string, certs []Cert) {
 		if err != nil {
 			fmt.Fprint(os.Stderr, cert.Name, ": ", f, ": ", err, "\n")
 		} else {
-			t, pct := ValidityPercentage(certs)
-			fmt.Print(cert.Name, ": expires in ", formatDuration(t), " ", pct, "%\n")
+			t := ValidityTime(certs)
+			fmt.Print(cert.Name, ": expires in ", formatDuration(t), "\n")
 		}
 	}
 }
@@ -119,20 +119,33 @@ func New(path string, conf Configuration) *Hatcher {
 	}
 }
 
-func (h *Hatcher) NeedsRenewal(cert Cert) bool {
-	if len(cert.Certs) < 1 {
-		return true
+// NeedsRenewal returns whether the certificate should be issued NOW based on
+// renewal information provided by the ACME server. Fallback expiry detection
+// based on NotAfter should still take place, especially in the case of
+// unlikely errors.
+func (h *Hatcher) NeedsRenewal(cert Cert) (bool, error) {
+	if len(cert.Certs) == 0 {
+		// We do not have a certificate yet
+		return true, nil
 	}
 
-	// ARI check; TODO: we should cache this information and respect
-	// r.RetryAfter
+	// Live ARI check
+	// NOTE: We only run once a day and typical Retry-After is 6 to 24 hours,
+	// so there's no need to cache this at this point.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	r, err := h.client.GetRenewalInfo(ctx, cert.Certs[0])
-	if err == nil {
-		return time.Now().After(r.SuggestedWindow.Start)
+	if err != nil {
+		return false, err
 	}
-	return true
+
+	slog.Debug("Fetched renewal information",
+		"cert", cert.Name,
+		"at", r.SelectedTime)
+
+	now := time.Now()
+	renew := !r.SelectedTime.IsZero() && now.Add(time.Hour*24).After(r.SelectedTime)
+	return renew, err
 }
 
 const HasEnabledReplacing = false
@@ -212,6 +225,8 @@ func (h *Hatcher) Issue(cert Cert) error {
 	if err != nil {
 		return err
 	}
+
+	// TODO: take note of renewal info, as rough guideline?
 	return updateLinks(h.path, id, cert.Domains)
 }
 

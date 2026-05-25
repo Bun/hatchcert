@@ -150,10 +150,17 @@ func main() {
 
 		issued := false
 		for _, req := range want {
-			if !req.Expired && !h.NeedsRenewal(req) {
-				slog.Debug("Certificate does not need renewal",
-					"domains", req.Domains)
-				continue
+			if !req.Expired { // Based on NotAfter
+				renew, err := h.NeedsRenewal(req)
+				if err != nil {
+					slog.Debug("Failed to check certificate renewal",
+						"err", err)
+				}
+				if !renew {
+					slog.Debug("Certificate does not need renewal",
+						"domains", req.Domains)
+					continue
+				}
 			}
 			err := h.Issue(req)
 			if err != nil {
