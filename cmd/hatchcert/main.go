@@ -30,26 +30,18 @@ import (
 func main() {
 	path := flag.String("path", "/var/lib/acme", "Output directory")
 	cfile := flag.String("conf", "/etc/hatchcert/config", "Config file")
-	verbose := flag.Bool("v", false, "Always print log")
+	verbose := flag.Bool("v", false, "Verbose logging")
 	flag.Parse()
 
-	level := hatchcert.LogOnlyImporant
-
-	// Check if we're running as cron and not as systemd unit
-	_, hasInvocationID := os.LookupEnv("INVOCATION_ID")
+	// Check if we're running as cron (and not as systemd unit)
 	_, hasTerm := os.LookupEnv("TERM")
-	if !hasTerm && !hasInvocationID {
-		level = hatchcert.LogSilent
-	}
-	if *verbose {
-		level = hatchcert.LogVerbose
-	}
+	_, hasInvocationID := os.LookupEnv("INVOCATION_ID")
+	cronMode := !hasTerm && !hasInvocationID
 
-	logbuf := hatchcert.SetupLogger(level)
+	logs := hatchcert.SetupLogger(*verbose)
 
 	conf, err := hatchcert.Conf(*cfile)
 	if err != nil {
-		logbuf.Emit()
 		fmt.Fprintln(os.Stderr, "Configuration error:", err)
 		os.Exit(1)
 	}
@@ -62,6 +54,8 @@ func main() {
 
 	var want []hatchcert.Cert
 	hook := false
+
+	h := hatchcert.New(*path, conf, logs.ACME)
 
 	switch opt := flag.Arg(0); opt {
 	case "reconcile", "":
@@ -95,7 +89,7 @@ func main() {
 		}
 
 	case "account":
-		hatchcert.AccountInfo(*path, conf)
+		h.AccountInfo()
 		return
 
 	case "status":
@@ -118,7 +112,6 @@ func main() {
 	}
 
 	failed := false
-	h := hatchcert.New(*path, conf)
 	if err := h.EnsureAccount(); err != nil {
 		failed = true
 		slog.Error("Failed to obtain ACME account",
@@ -165,9 +158,11 @@ func main() {
 			err := h.Issue(req)
 			if err != nil {
 				failed = true
-				log.Println("Failed to issue:", err)
-			} else {
-				logbuf.Important("Issued certificate",
+				slog.Warn("Failed to issue",
+					"domains", req.Domains,
+					"error", err)
+			} else if !cronMode {
+				slog.Info("Issued certificate",
 					"domains", req.Domains)
 				issued = true
 			}
@@ -184,9 +179,9 @@ func main() {
 	}
 
 uhoh:
-	if failed && logbuf != nil {
+	if failed {
 		// Always provide details on failure
-		logbuf.Emit()
+		logs.OnError.Emit()
 	}
 	if failed {
 		os.Exit(1)

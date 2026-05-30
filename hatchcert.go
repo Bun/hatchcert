@@ -42,8 +42,54 @@ func Active(path string, certs []Cert) {
 	}
 }
 
-func AccountInfo(path string, conf Configuration) {
-	acfile := filepath.Join(path, "account")
+type Hatcher struct {
+	path   string
+	conf   Configuration
+	client *acmez.Client
+	acct   acme.Account
+	// Strictly used to capture details when a failure occurs, unless in
+	// verbose mode.
+	acmeLogger *Logger
+}
+
+func mkclient(conf Configuration, l *slog.Logger) *acmez.Client {
+	var hc *http.Client
+	server := conf.ACME
+	if server == "" || server == "prod" {
+		server = LEDirectoryProduction
+	} else if server == "staging" {
+		server = LEDirectoryStaging
+	} else if server == "pebble" {
+		server = "https://127.0.0.1:14000/dir"
+		hc = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+			},
+		}
+	}
+	return &acmez.Client{
+		Client: &acme.Client{
+			Directory:  server,
+			HTTPClient: hc,
+			Logger:     l,
+			UserAgent:  "hatchcert",
+		},
+		ChallengeSolvers: conf.Solvers,
+	}
+}
+
+func New(path string, conf Configuration, acmeLogs *slog.Logger) *Hatcher {
+	return &Hatcher{
+		path:   path,
+		conf:   conf,
+		client: mkclient(conf, acmeLogs),
+	}
+}
+
+func (h *Hatcher) AccountInfo() {
+	acfile := filepath.Join(h.path, "account")
 	if !exists(acfile) {
 		fmt.Fprintln(os.Stderr, "Account file does not exist:", acfile)
 		return
@@ -65,57 +111,13 @@ func AccountInfo(path string, conf Configuration) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
-	client := mkclient(conf)
-	if acct, err := client.GetAccount(ctx, acme.Account{PrivateKey: key.(crypto.Signer)}); err != nil {
+	if acct, err := h.client.GetAccount(ctx, acme.Account{PrivateKey: key.(crypto.Signer)}); err != nil {
 		fmt.Fprintln(os.Stderr, "Failed to obtain account information:", err)
 		return
 	} else {
 		fmt.Println("Status:", acct.Status)
 		fmt.Println("Contact:", acct.Contact)
 		fmt.Println("Account URL:", acct.Location)
-	}
-}
-
-type Hatcher struct {
-	path   string
-	conf   Configuration
-	client *acmez.Client
-	acct   acme.Account
-}
-
-func mkclient(conf Configuration) *acmez.Client {
-	var hc *http.Client
-	server := conf.ACME
-	if server == "" || server == "prod" {
-		server = LEDirectoryProduction
-	} else if server == "staging" {
-		server = LEDirectoryStaging
-	} else if server == "pebble" {
-		server = "https://127.0.0.1:14000/dir"
-		hc = &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
-			},
-		}
-	}
-	return &acmez.Client{
-		Client: &acme.Client{
-			Directory:  server,
-			HTTPClient: hc,
-			Logger:     slog.Default(),
-			UserAgent:  "hatchcert",
-		},
-		ChallengeSolvers: conf.Solvers,
-	}
-}
-
-func New(path string, conf Configuration) *Hatcher {
-	return &Hatcher{
-		path:   path,
-		conf:   conf,
-		client: mkclient(conf),
 	}
 }
 
@@ -275,8 +277,9 @@ func (h *Hatcher) EnsureAccount() error {
 		h.acct = acct
 	}
 	if h.acct.Location != "" && saved.URL != h.acct.Location {
-		slog.Info("ACME account",
-			"loc", h.acct.Location)
+		// This'll only happen on first run
+		slog.Info("ACME account registered",
+			"url", h.acct.Location)
 		saved.URL = h.acct.Location
 		store = true
 	}
